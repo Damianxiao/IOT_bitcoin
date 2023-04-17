@@ -2,7 +2,6 @@ import binascii
 import hashlib
 import pickle
 import random
-
 import ecdsa
 
 # This elliptic curve is used by bitcoin too
@@ -11,7 +10,9 @@ CURVE = ecdsa.SECP256k1
 HashLen = 160;
 
 # cur_path = '/root/PycharmProjects/bitcoin'
-cur_path = '/home/findns/Projects/Python/bitcoin'
+# cur_path = '/home/findns/Projects/Python/bitcoin'
+cur_path = '/mnt/e/labtoryCode/IOT_BLOCKCHAIN_LAB/IOT_bitcoin'
+
 
 
 def sha1_int(key):

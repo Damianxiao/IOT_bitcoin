@@ -8,6 +8,7 @@ import logging  # 引入logging模块
 import os.path
 #from watchdog.events import *
 import time
+from batch import *
 
 from myleger import Leger;
 
@@ -17,19 +18,20 @@ class Node(myRPCProtocol):
 
         super(Node, self).__init__()
 
-        if ID is None:
-            ID = random_id();
+        if ID is None: # 若没有ID 随机赋给一个
+            ID = random_id()
 
-        self.ID = ID;
-        self.routingTable = KadTable(self.ID);
-        self.recallFunctions = self.recordFunctions();
+        self.ID = ID #节点ID
+        self.routingTable = KadTable(self.ID) # 路由表
+        self.recallFunctions = self.recordFunctions()
 
-        self.BroadCasts = [];
+        self.BroadCasts = []
         # self.leger = Leger(self.ID);
 
         self.blockchain = None
         self.local_addr = None
         self.wallet = 0
+        self.heap=[]
 
         self.pos = 0
 
@@ -295,54 +297,105 @@ class Node(myRPCProtocol):
 
         return False
 
-
+    # 调用from startPOW
     @asyncio.coroutine
     def mine(self):
         # We run the proof of work algorithm to get the next proof...
         last_block = self.blockchain.last_block
         last_proof = last_block['proof']
         # use proof of work
-        proof = yield from self.blockchain.proof_of_work(last_proof)
-        if self.blockchain.stop == True:
-            return None;
 
-        # 给工作量证明的节点提供奖励.
-        # 发送者为 "0" 表明是新挖出的币
-        self.blockchain.new_transaction(
-            sender="0",
-            recipient=self.ID,
-            amount=random.randint(1,10),
-        )
+        res = yield from self.blockchain.proof_of_work(last_proof)
+        ## 判断pow返回的类型，是list还是一个proof，即是shares还是挖出区块
+        ## 判断batch合法性
+        if len(res)>1:
+            tree = build_complete_binary_tree_ex(res) # 生成batch
+            ## 对batch进行验证 首先检查根，如果合格再进入路径检查
+            root = tree[0]
+            if(root[:4] == "0000"):
+                treeNode = build_tree(tree)  # 转为树结构节点
+                dfs(treeNode)  # 取路径摘要
+                path = find_path(treeNode)  # 获得路径
+                for i,item in enumerate(path): # 评估摘要路径的合法性
+                    if i == len(path)-1:
+                        if item[0][:4] == "0000":
+                            continue;
+                        else:
+                            return "denied" # share被拒绝
+                    if(item[0][:4] == "0000" and item[1]!=0):
+                        continue;
+                    else:
+                        return "denied" # share被拒绝
+                # 此处代表评估已通过，通过share的有效数量来给予激励
+                if self.blockchain.stop == True:
+                    return None;
+                # 给工作量证明的节点提供奖励.
+                # 发送者为 "0" 表明是新挖出的币
+                # 这里的出块奖励是随机1~10
+                self.blockchain.new_transaction(
+                    sender="0",
+                    recipient=self.ID,
+                    amount=len(path)/10, #暂定为路径长度的10分之一
+                )
+                # 仅赋奖励 不出块
+                # 这个response？
+                response ={
+                    'message': "Shares batch validation pass",
+                    'transactions': block['transactions'],
+                }
+                return "receive" # share评估通过
+            else:
+                return "denied" # share被拒绝
+        else:
+            proof = res
+            if self.blockchain.stop == True:
+                return None;
+            # 给工作量证明的节点提供奖励.
+            # 发送者为 "0" 表明是新挖出的币
+            # 这里的出块奖励是随机1~10
+            self.blockchain.new_transaction(
+                sender="0",
+                recipient=self.ID,
+                amount=random.randint(1, 10),
+            )
 
-        # Forge the new Block by adding it to the chain
-        block = self.blockchain.new_block(proof)
+            # Forge the new Block by adding it to the chain
+            block = self.blockchain.new_block(proof)
 
-        response = {
-            'message': "New Block Forged",
-            'index': block['index'],
-            'transactions': block['transactions'],
-            'proof': block['proof'],
-            'previous_hash': block['previous_hash'],
-        }
-        return response
+            response = {
+                'message': "New Block Forged",
+                'index': block['index'],
+                'transactions': block['transactions'],
+                'proof': block['proof'],
+                'previous_hash': block['previous_hash'],
+            }
+            return response
+
+
+
 
     @asyncio.coroutine
     def startPOW(self):
         while True:
-            response = yield from self.mine()
+            response = yield from self.mine() #一般在方法中嵌套使用，这个声明就相当于在第一层调用mine()一样
             if response!=None:
-                print(self.ID, ' has mined new block ')
-                self.logger.info('after mining, blockchain = ')
-                self.logger.info(self.blockchain.chain)
-                # broadcast new Blcokchain
-                self.recordBlockInfo()
-                self.recordTXInfo()
-                yield from self.postBoardcast(random_id(), 'recordNewBlock', self.ID, self.blockchain.chain[-1]);
+                if len(response)== 5 :
+                    print(self.ID, ' has mined new block ')
+                    self.logger.info('after mining, blockchain = ')
+                    self.logger.info(self.blockchain.chain)
+                    # broadcast new Blcokchain
+                    self.recordBlockInfo()
+                    self.recordTXInfo()
+                    yield from self.postBoardcast(random_id(), 'recordNewBlock', self.ID, self.blockchain.chain[-1]);
+                elif len(response)== 2 :
+                    print(self.ID, ' submit a shares batch ')
+                    self.logger.info(self.blockchain.chain)
             else:
                 print('This new block has been mined by others')
                 self.logger.info('This blockchain has been mined by others')
-            #每当挖完矿或者别人挖到矿时,等待一段时间,等所有消息处理完毕
-            yield from asyncio.sleep(30)
+            #每当挖完矿或者别人挖到矿时,等待一段时间,等所有消息处理完毕 ?
+            # yield from asyncio.sleep(30)
+            yield from asyncio.sleep(5)
             self.blockchain.stop=False;
 
 

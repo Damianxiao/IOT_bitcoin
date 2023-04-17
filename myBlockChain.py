@@ -150,6 +150,7 @@ class BlockChain(object):
         # Returns the last Block in the chain
         return self.chain[-1]
 
+    # 调用来自 myNode.mine()
     @asyncio.coroutine
     def proof_of_work(self, last_proof):
         """
@@ -159,14 +160,23 @@ class BlockChain(object):
         :param last_proof: <int>
         :return: <int>
         """
-
         proof = 0
-        count=0
+        count= 0
+        shares=[]
         while self.valid_proof(last_proof, proof) is False:
             tmp = random.randint(1,3)
-            # print(proof)
+            ### print(proof)
+            ### 加入之前判断此share是否存在
+            ###  sharesList集需要足够多的元素,这里先定为15个
+            if (len(shares) >= 15):
+                return shares
+            if(proof[:4] == "0000"):
+                if(proof in share is False):
+                    share+=1
+                    shares.append(proof)
             proof += tmp
             count+=1
+            # proof 相当于nonce 用hash方法得到一个hash值
             if count==5:
                 yield from asyncio.sleep(1)
                 count=0
@@ -181,7 +191,7 @@ class BlockChain(object):
             proof += 1
         return proof
 
-
+    # from proof_of_work
     @staticmethod
     def valid_proof(last_proof, proof):
         """
@@ -197,7 +207,13 @@ class BlockChain(object):
         # guess = f'{last_proof}{proof}'.encode()
 
         guess_hash = hashlib.sha256(guess).hexdigest()
-        return guess_hash[:2] == "00"
+        # 设置一个相对简单的hash难度，只要满足这个难度的都视为一个share
+        # 挖出了足够的share将被打包成一个batch
+        # if(guess_hash[:6] == "000000"):
+        #     return "proof"
+        # elif(guess_hash[:4] == "0000"): # 这里的share先定为4
+        #     return "share"
+        return guess_hash[:2] == "000000" # 这里是两个0
 
     # check if chain has fork
     def check_chain(self, chain):

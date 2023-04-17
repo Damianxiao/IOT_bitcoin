@@ -23,9 +23,9 @@ from mininet.net import Mininet
 from mininet.link import Link
 from mininet.cli import CLI
 from mininet.node import ( UserSwitch, OVSSwitch, OVSBridge,
-                           IVSSwitch,OVSKernelSwitch )
+                           IVSSwitch,OVSKernelSwitch,OVSController,Host, CPULimitedHost,Controller,Ryu, NOX, )
 from mininet.topo import ( SingleSwitchTopo, LinearTopo,
-                           SingleSwitchReversedTopo, MinimalTopo )
+                           SingleSwitchReversedTopo,MinimalTopo )
 from mininet.topolib import TreeTopo, TorusTopo
 from myTopo import *
 from mininet.nodelib import LinuxBridge
@@ -37,6 +37,7 @@ from mininet.link import TCLink
 IP = "10.0.0.0/8"
 PORT = 9000
 
+# 定义字典
 SWITCHES = { 'user': UserSwitch,
              'ovs': OVSSwitch,
              'ovsbr' : OVSBridge,
@@ -44,25 +45,39 @@ SWITCHES = { 'user': UserSwitch,
              'ivs': IVSSwitch,
              'lxbr': LinuxBridge,
              'default': OVSKernelSwitch }
+TOPODEF = 'minimal'
 TOPOS = { 'minimal': MinimalTopo,
           'linear': LinearTopo,
           'reversed': SingleSwitchReversedTopo,
           'single': SingleSwitchTopo,
           'tree': TreeTopo,
           'torus': TorusTopo }
+HOSTDEF = 'proc'
+HOSTS = { 'proc': Host,
+          'rt': specialClass( CPULimitedHost, defaults=dict( sched='rt' ) ),
+          'cfs': specialClass( CPULimitedHost, defaults=dict( sched='cfs' ) ) }
 
+CONTROLLERDEF = 'default'
+CONTROLLERS = { 'ref': Controller,
+                'ovsc': OVSController,
+                'nox': NOX,
+                'ryu': Ryu, }
 
 P2PNet=None
 MODE = "pow"
+# mininet 初始化
+net = Mininet(topo=Topo,host=CPULimitedHost, link=TCLink,controller = OVSController)
+
 
 def setMode(mode):
     global MODE;
     MODE = mode;
 
 def setupP2PNet(arg1=1, arg2=3, netType="net", attack="none",attack_num=1):
-
+    #  通过mininet 设置了一个P2P网络
     global P2PNet;
 
+    # 网络结构 环形 、 net 、 star、tree
     if netType == "circle":
         print("circle");
         topo = circleTopo(arg1,arg2)
@@ -88,15 +103,17 @@ def setupP2PNet(arg1=1, arg2=3, netType="net", attack="none",attack_num=1):
             print("netType error!");
             sys.exit(0);
 
-        P2PNet = Mininet(topo=topo,link=TCLink,ipBase=IP);
+        P2PNet = Mininet(topo=topo,link=TCLink,ipBase=IP,controller = OVSController);
 
     P2PNet.start();
     #限制带宽
     # P2PNet.iperf()
 
+    # 迭代网络中所有主机 并打印
     for i, s in enumerate(P2PNet.switches):
         print(i,s.IP)
 
+    #  如果有攻击模式，启用攻击方式
     for i, host in enumerate(P2PNet.hosts):
         print(i,host.IP)
         if(i>=0):
@@ -197,7 +214,8 @@ def fileCommand():
 
         sleep(2)
 
-
+#
+#
 class myCommand(Cmd):
     intro = "Control the bitcoin simulation network. Type help or ? to list commands.\n"
     prompt = ">>> "
@@ -210,26 +228,31 @@ class myCommand(Cmd):
         for i, host in enumerate(P2PNet.hosts):
             print(i, host.IP, host.name)
 
+    # do_AddNode()方法用于向P2P网络中添加新的节点。
+    # 它首先为新节点创建一个唯一的ID，然后使用addHost()方法将其添加到网络中。
+    # 接下来，它使用addLink()方法将新节点连接到交换机，并使用attach()和start()方法启动交换机。
+    # 最后，它使用configDefault()方法配置新节点的默认路由，并使用cmd()方法运行一个xterm命令，用于启动新节点。
     def do_AddNode(self, line):
 
+        # len取主机数量长度
         id = len(P2PNet.hosts)
-
+        # 新建一个主机，分配ID
         newHost = P2PNet.addHost("h%ds%d" % (id, id))
-
-        switch = P2PNet.switches[0];
-
-        P2PNet.addLink(switch, newHost);
+        # 交换机 switches是提前编辑的字典
+        switch = P2PNet.switches[0]
+        # 使节点连接到交换机
+        P2PNet.addLink(switch, newHost)
 
         slink = Link(switch, newHost)
-        switch.attach(slink);
-        switch.start(P2PNet.controllers);
+        switch.attach(slink)
+        switch.start(P2PNet.controllers)
 
         newHost.configDefault(defaultRoute=newHost.defaultIntf())
 
         print(P2PNet.hosts[0].cmd("ping -c1 %s" % newHost.IP() ))       #important!!!
 
         print(newHost.cmd("ping -c1 10.0.0.1"))
-
+        # 这个CMD用于启用新节点
         cmd = xtermCMD(newHost.IP(),PORT,P2PNet.hosts[0].IP(),PORT, MODE)
 
         print(cmd)
@@ -290,12 +313,14 @@ def deleteCMD():
 if __name__ == '__main__':
 
     try:
-        delete_log();
-        deleteCMD();
+        # 每次启动都删除日志和CMD文件
+        delete_log()
+        deleteCMD()
         # setupP2PNet(5,1,netType='star',attack="double", attack_num=1);
-        # setMode("PBFT")
-        setupP2PNet(5,1,netType='star');
-        myCommand().cmdloop();
+        setMode(MODE)
+        # 初始化P2P网络
+        setupP2PNet(5,1,netType='star')
+        myCommand().cmdloop()
     except SystemExit:
         pass
     except:
