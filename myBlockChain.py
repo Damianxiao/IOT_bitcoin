@@ -36,6 +36,7 @@ class BlockChain(object):
         # parsed_url = urlparse(address)
         self.nodes.add(address)
 
+    # 参数中 previous hash是一个可选的，可以不传
     def new_block(self, proof, previous_hash=None):
         """
         生成新块
@@ -43,6 +44,8 @@ class BlockChain(object):
         :param previous_hash: (Optional) <str> Hash of previous Block
         :return: <dict> New Block
         """
+        
+        #如果当前区块链中没有任何区块，则创建一个创世区块并添加到区块链中。
 
         if len(self.chain) == 0:
             id = random_id()
@@ -302,6 +305,7 @@ class BlockChain(object):
 
         return txs
 
+    # 检测交易是否有效
     def check_transactions(self):
         # self.logger.info('in check_transactions')
         valid_transactions = []

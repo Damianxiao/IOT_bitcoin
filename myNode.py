@@ -359,6 +359,7 @@ class Node(myRPCProtocol):
                 amount=random.randint(1, 10),
             )
 
+            # from myBlockchain - new_block
             # Forge the new Block by adding it to the chain
             block = self.blockchain.new_block(proof)
 

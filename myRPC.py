@@ -122,7 +122,10 @@ class myRPCProtocol(asyncio.DatagramProtocol):
         pass
 
 
-
+#通过使用 RPC 协议，节点可以像调用本地方法一样调用远程节点的方法，并获取它们需要的数据。
+# 例如，在比特币网络中，各个节点可以通过 RPC 协议来查询和获取区块链的相关信息，
+# 如当前的节点数量、最新区块的哈希值等。此外，节点还可以使用 RPC 协议来发送交易请求和接收新区块等消息，
+# 从而实现整个区块链网络的协作。
 #将所有的函数调用变成RPC调用
 def convert2RPC(func):
     @asyncio.coroutine
